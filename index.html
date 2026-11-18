@@ -1,0 +1,222 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Холст</title>
+<style>
+:root{--bg:#ecebe8;--surface:#fbfbfa;--ink:#161616;--mute:#85847f;--line:#dcdbd7;color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#131314;--surface:#1e1e20;--ink:#f1f1ef;--mute:#8a8a90;--line:#303034;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#131314;--surface:#1e1e20;--ink:#f1f1ef;--mute:#8a8a90;--line:#303034;color-scheme:dark}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--ink);font:13px/1.3 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;display:flex;flex-direction:column;overscroll-behavior:none;user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent}
+header{display:flex;justify-content:space-between;padding:10px 12px 0}
+.grp{display:flex;gap:2px}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+.ib{width:40px;height:40px;border-radius:12px;display:grid;place-items:center;transition:background .15s,color .15s}
+.ib:hover{background:var(--line)}
+.ib:disabled{opacity:.3;pointer-events:none}
+.ib.on{background:var(--ink);color:var(--bg)}
+.ib:focus-visible,.sw:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.stage{flex:1;min-height:0;display:grid;place-items:center;container-type:size;padding:10px}
+.paper{position:relative;width:min(100cqw,100cqh);aspect-ratio:1;background:#fff;border-radius:4px;box-shadow:0 1px 2px #0002,0 8px 30px #0002;touch-action:none;overflow:hidden}
+.paper canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+#base{cursor:crosshair;touch-action:none}
+#lay{pointer-events:none}
+#ring{position:fixed;left:0;top:0;border:1px solid #000;box-shadow:0 0 0 1px #fff;border-radius:50%;pointer-events:none;display:none;transform:translate(-50%,-50%);z-index:5}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:20px;margin:0 12px 12px;padding:8px 10px 12px;width:min(100% - 24px,560px);align-self:center;box-sizing:border-box;display:flex;flex-direction:column;gap:8px}
+.tools{display:flex;justify-content:space-between}
+.colors{display:flex;align-items:center;gap:8px}
+.pal{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;padding:3px;flex:1}
+.pal::-webkit-scrollbar{display:none}
+.sw{flex:none;width:26px;height:26px;border-radius:50%;border:0;box-shadow:inset 0 0 0 1px #0003}
+.sw.on{outline:2px solid var(--ink);outline-offset:2px}
+#cur{flex:none;width:40px;height:40px;border:0;padding:0;border-radius:50%;background:none;cursor:pointer}
+#cur::-webkit-color-swatch-wrapper{padding:0}
+#cur::-webkit-color-swatch{border:2px solid var(--line);border-radius:50%}
+#cur::-moz-color-swatch{border:2px solid var(--line);border-radius:50%}
+.sl{display:grid;grid-template-columns:84px 1fr 34px;align-items:center;gap:8px;color:var(--mute)}
+.sl output{text-align:right;font-variant-numeric:tabular-nums;color:var(--ink)}
+input[type=range]{width:100%;accent-color:var(--ink);margin:0;height:28px}
+#modal{position:fixed;inset:0;background:#000c;display:grid;place-items:center;z-index:9;padding:20px;text-align:center;color:#fff}
+#modal[hidden]{display:none}
+#modal img{max-width:min(100%,520px);max-height:70vh;border-radius:4px;background:#fff;-webkit-touch-callout:default;user-select:auto;-webkit-user-select:auto}
+#modal p{margin:12px 0 0;opacity:.8}
+</style>
+</head>
+<body>
+<header>
+  <div class="grp"><button class="ib" id="undo" title="Отменить (Ctrl+Z)" aria-label="Отменить"><svg viewBox="0 0 24 24"><path d="M9 7L4 12l5 5M4 12h10a6 6 0 010 8h-3"/></svg></button>
+  <button class="ib" id="redo" title="Повторить (Ctrl+Shift+Z)" aria-label="Повторить"><svg viewBox="0 0 24 24" style="transform:scaleX(-1)"><path d="M9 7L4 12l5 5M4 12h10a6 6 0 010 8h-3"/></svg></button></div>
+  <div class="grp"><button class="ib" id="clear" title="Очистить" aria-label="Очистить"><svg viewBox="0 0 24 24"><path d="M5 7h14M10 7V4h4v3M7 7l1 13h8l1-13"/></svg></button>
+  <button class="ib" id="save" title="Сохранить PNG" aria-label="Сохранить"><svg viewBox="0 0 24 24"><path d="M12 4v11M7 11l5 5 5-5M5 20h14"/></svg></button></div>
+</header>
+<div class="stage"><div class="paper"><canvas id="base"></canvas><canvas id="lay"></canvas></div></div>
+<div class="panel">
+  <div class="tools" id="tools"></div>
+  <div class="colors"><input type="color" id="cur" value="#161616" aria-label="Свой цвет"><div class="pal" id="pal"></div></div>
+  <label class="sl">Размер<input type="range" id="size" min="1" max="120" value="8"><output id="sizeV">8</output></label>
+  <label class="sl">Непрозрачность<input type="range" id="alpha" min="5" max="100" value="100"><output id="alphaV">100</output></label>
+</div>
+<div id="ring"></div>
+<div id="modal" hidden><div><img id="shot" alt="Рисунок"><p>Нажмите и удерживайте изображение, чтобы сохранить. Коснитесь фона, чтобы закрыть.</p></div></div>
+<script>
+const N=1280,$=s=>document.querySelector(s);
+const base=$('#base'),lay=$('#lay'),ring=$('#ring');
+base.width=base.height=lay.width=lay.height=N;
+const bc=base.getContext('2d'),lc=lay.getContext('2d');
+bc.fillStyle='#fff';bc.fillRect(0,0,N,N);
+const S={tool:'pen',color:'#161616',size:8,alpha:1};
+let lastE=null;
+const T={
+ pen:{kind:'hard',sp:.06,mul:1},
+ brush:{kind:'soft',sp:.07,mul:1},
+ marker:{kind:'hard',sp:.06,mul:.55},
+ spray:{kind:'spray',sp:.12,mul:1},
+ eraser:{kind:'hard',sp:.06,mul:1},
+ fill:{},pick:{}
+};
+const ICONS={
+ pen:'<path d="M4 20l1-4L16 5l3 3L8 19l-4 1z"/>',
+ brush:'<path d="M20 4c-6 2-9 6-10 10l2 2c4-1 8-4 8-12zM8 15c-2 0-3 2-3 5 3 0 5-1 5-3"/>',
+ marker:'<path d="M14 4l6 6-7 7-6-6zM8 12l4 4M5 20h6"/>',
+ spray:'<g fill="currentColor" stroke="none"><circle cx="6" cy="17" r="1.2"/><circle cx="11" cy="13" r="1.2"/><circle cx="15" cy="8" r="1.2"/><circle cx="18" cy="15" r="1.2"/><circle cx="9" cy="7" r="1.2"/><circle cx="14" cy="18" r="1.2"/><circle cx="19" cy="6" r="1.2"/></g>',
+ eraser:'<path d="M4 15l8-9 8 8-5 5H9zM9 20h11M8 11l7 7"/>',
+ fill:'<path d="M5 11l7-7 7 7-7 7zM19 15c1 2 2 3 2 4a2 2 0 01-4 0c0-1 1-2 2-4z"/>',
+ pick:'<path d="M15 4l5 5-3 1-7 7-4 1 1-4 7-7zM13 7l4 4"/>'
+};
+const NAMES={pen:'Карандаш (B)',brush:'Мягкая кисть',marker:'Маркер',spray:'Спрей',eraser:'Ластик (E)',fill:'Заливка (G)',pick:'Пипетка (I)'};
+const tools=$('#tools');
+for(const k in ICONS){const b=document.createElement('button');b.className='ib';b.dataset.t=k;b.title=NAMES[k];b.setAttribute('aria-label',NAMES[k]);b.innerHTML='<svg viewBox="0 0 24 24">'+ICONS[k]+'</svg>';b.onclick=()=>setTool(k);tools.append(b)}
+function setTool(k){S.tool=k;tools.querySelectorAll('.ib').forEach(b=>b.classList.toggle('on',b.dataset.t===k));base.style.cursor=(k==='fill'||k==='pick')?'copy':'crosshair';updRing()}
+setTool('pen');
+
+const PAL=['#161616','#8c8c8c','#ffffff','#e5484d','#f76b15','#f5c518','#30a46c','#12a594','#0090ff','#3e63dd','#8e4ec6','#d6409f','#7a5c45'];
+const pal=$('#pal');
+PAL.forEach(c=>{const b=document.createElement('button');b.className='sw';b.style.background=c;b.dataset.c=c;b.setAttribute('aria-label',c);b.onclick=()=>setColor(c);pal.append(b)});
+function setColor(c){S.color=c;$('#cur').value=c;pal.querySelectorAll('.sw').forEach(b=>b.classList.toggle('on',b.dataset.c===c));mkSprite()}
+$('#cur').oninput=e=>setColor(e.target.value);
+
+$('#size').oninput=e=>{S.size=+e.target.value;$('#sizeV').textContent=S.size;updRing()};
+$('#alpha').oninput=e=>{S.alpha=e.target.value/100;$('#alphaV').textContent=e.target.value};
+
+/* soft brush sprite */
+const spr=document.createElement('canvas');spr.width=spr.height=128;
+function mkSprite(){const g=spr.getContext('2d');g.clearRect(0,0,128,128);const gr=g.createRadialGradient(64,64,0,64,64,64);const c=S.color;gr.addColorStop(0,c);gr.addColorStop(.4,c+'99');gr.addColorStop(1,c+'00');g.fillStyle=gr;g.fillRect(0,0,128,128)}
+setColor(S.color);
+
+/* history */
+const hist=[],MAX=24;let hi=-1;
+function snap(){const c=document.createElement('canvas');c.width=c.height=N;c.getContext('2d').drawImage(base,0,0);return c}
+function push(){hist.length=hi+1;hist.push(snap());if(hist.length>MAX)hist.shift();hi=hist.length-1;ubtn()}
+function restore(i){hi=i;bc.globalAlpha=1;bc.drawImage(hist[i],0,0);ubtn()}
+function ubtn(){$('#undo').disabled=hi<=0;$('#redo').disabled=hi>=hist.length-1}
+const undo=()=>{if(hi>0)restore(hi-1)},redo=()=>{if(hi<hist.length-1)restore(hi+1)};
+$('#undo').onclick=undo;$('#redo').onclick=redo;
+$('#clear').onclick=()=>{bc.globalAlpha=1;bc.fillStyle='#fff';bc.fillRect(0,0,N,N);push()};
+push();
+
+/* drawing */
+let drawing=false,sm,last,lm,isPen=false,ctx,tl,pid;
+const rad=p=>Math.max(.5,S.size/2*(isPen?.2+.8*p:1));
+function stamp(x,y,r){
+  if(tl.kind==='soft')ctx.drawImage(spr,x-r,y-r,2*r,2*r);
+  else if(tl.kind==='spray'){const n=Math.max(2,Math.round(r*.6));for(let i=0;i<n;i++){const a=Math.random()*6.2832,d=r*Math.sqrt(Math.random());ctx.fillRect(x+Math.cos(a)*d,y+Math.sin(a)*d,1.4,1.4)}}
+  else{ctx.beginPath();ctx.arc(x,y,r,0,6.2832);ctx.fill()}
+}
+function seg(a,c,b){
+  const len=Math.hypot(c.x-a.x,c.y-a.y)+Math.hypot(b.x-c.x,b.y-c.y);
+  const r=rad(Math.min(a.p,b.p)),step=Math.max(.5,r*2*tl.sp);
+  const n=Math.max(1,Math.ceil(len/step));
+  for(let i=1;i<=n;i++){const t=i/n,u=1-t;
+    stamp(u*u*a.x+2*u*t*c.x+t*t*b.x,u*u*a.y+2*u*t*c.y+t*t*b.y,rad(u*a.p+t*b.p))}
+}
+function pt(e){const r=base.getBoundingClientRect(),k=N/r.width;return{x:(e.clientX-r.left)*k,y:(e.clientY-r.top)*k,p:e.pointerType==='pen'?(e.pressure||.5):1}}
+function begin(e){
+  if(e.pointerType==='mouse'&&e.button!==0)return;
+  e.preventDefault();const p=pt(e);
+  if(S.tool==='fill'){fill(p.x|0,p.y|0);return}
+  if(S.tool==='pick'){pick(p.x|0,p.y|0);return}
+  base.setPointerCapture(e.pointerId);pid=e.pointerId;drawing=true;isPen=e.pointerType==='pen';tl=T[S.tool];
+  const er=S.tool==='eraser';ctx=er?bc:lc;ctx.fillStyle=er?'#fff':S.color;
+  ctx.globalAlpha=tl.kind==='soft'?.22:1;
+  lay.style.opacity=er?1:S.alpha*tl.mul;
+  sm=last=lm=p;stamp(p.x,p.y,rad(p.p));
+}
+function move(e){
+  ringAt(e);
+  if(!drawing||e.pointerId!==pid)return;
+  const ev=e.getCoalescedEvents?e.getCoalescedEvents():[];
+  for(const q of ev.length?ev:[e]){
+    const r=pt(q);
+    sm={x:sm.x+(r.x-sm.x)*.5,y:sm.y+(r.y-sm.y)*.5,p:sm.p+(r.p-sm.p)*.4};
+    const m={x:(last.x+sm.x)/2,y:(last.y+sm.y)/2,p:(last.p+sm.p)/2};
+    seg(lm,last,m);lm=m;last=sm;
+  }
+}
+function end(e){
+  if(!drawing||e.pointerId!==pid)return;drawing=false;
+  const r=pt(e);r.p=sm.p;seg(lm,sm,r);
+  if(ctx===lc){bc.globalAlpha=S.alpha*tl.mul;bc.drawImage(lay,0,0);bc.globalAlpha=1;lc.clearRect(0,0,N,N);lay.style.opacity=1}
+  ctx.globalAlpha=1;push();
+}
+base.addEventListener('pointerdown',begin);
+base.addEventListener('pointermove',move);
+base.addEventListener('pointerup',end);
+base.addEventListener('pointercancel',end);
+base.addEventListener('pointerleave',()=>{ring.style.display='none'});
+base.addEventListener('contextmenu',e=>e.preventDefault());
+
+/* cursor ring */
+function updRing(){if(lastE)ringAt(lastE)}
+function ringAt(e){
+  lastE=e;
+  if(e.pointerType==='touch'||S.tool==='fill'||S.tool==='pick'){ring.style.display='none';return}
+  const d=Math.max(4,S.size*base.getBoundingClientRect().width/N);
+  ring.style.cssText='display:block;width:'+d+'px;height:'+d+'px;left:'+e.clientX+'px;top:'+e.clientY+'px';
+}
+
+/* fill and eyedropper */
+function hex(v){return v.toString(16).padStart(2,'0')}
+function pick(x,y){const d=bc.getImageData(x,y,1,1).data;setColor('#'+hex(d[0])+hex(d[1])+hex(d[2]));setTool('pen')}
+function fill(x,y){
+  const img=bc.getImageData(0,0,N,N),d=img.data,W=N;
+  const j0=(y*W+x)*4,r0=d[j0],g0=d[j0+1],b0=d[j0+2];
+  const cr=parseInt(S.color.slice(1,3),16),cg=parseInt(S.color.slice(3,5),16),cb=parseInt(S.color.slice(5,7),16),a=S.alpha;
+  const ok=i=>{const j=i*4;return Math.abs(d[j]-r0)+Math.abs(d[j+1]-g0)+Math.abs(d[j+2]-b0)<=90};
+  const seen=new Uint8Array(W*W),st=[x,y];
+  while(st.length){
+    const yy=st.pop(),xx=st.pop(),row=yy*W;
+    if(seen[row+xx]||!ok(row+xx))continue;
+    let l=xx,r=xx;
+    while(l>0&&!seen[row+l-1]&&ok(row+l-1))l--;
+    while(r<W-1&&!seen[row+r+1]&&ok(row+r+1))r++;
+    for(let k=l;k<=r;k++){const i=row+k,j=i*4;seen[i]=1;d[j]=d[j]*(1-a)+cr*a;d[j+1]=d[j+1]*(1-a)+cg*a;d[j+2]=d[j+2]*(1-a)+cb*a;d[j+3]=255}
+    for(const ny of [yy-1,yy+1]){
+      if(ny<0||ny>=W)continue;let run=false;
+      for(let k=l;k<=r;k++){const i=ny*W+k,g=!seen[i]&&ok(i);if(g&&!run)st.push(k,ny);run=g}
+    }
+  }
+  bc.putImageData(img,0,0);push();
+}
+
+/* save */
+$('#save').onclick=()=>{$('#shot').src=base.toDataURL('image/png');$('#modal').hidden=false};
+$('#modal').onclick=e=>{if(e.target.id!=='shot')$('#modal').hidden=true};
+
+/* keys */
+addEventListener('keydown',e=>{
+  if(e.target.tagName==='INPUT'&&e.target.type!=='range')return;
+  const k=e.key.toLowerCase(),m=e.ctrlKey||e.metaKey;
+  if(m&&k==='z'){e.preventDefault();e.shiftKey?redo():undo()}
+  else if(m&&k==='y'){e.preventDefault();redo()}
+  else if(!m){
+    const map={b:'pen',e:'eraser',g:'fill',i:'pick'};
+    if(map[k])setTool(map[k]);
+    else if(k==='['||k===']'){const s=$('#size');s.value=Math.max(1,Math.min(120,+s.value+(k==='['?-4:4)));s.oninput({target:s})}
+  }
+});
+</script>
+</body>
+</html>
